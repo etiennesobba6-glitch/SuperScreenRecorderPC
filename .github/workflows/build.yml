@@ -14,16 +14,32 @@ jobs:
       - name: Compiler
         run: dotnet build SuperScreenRecorder.csproj -c Release -o out
 
-      - name: Ajouter ffmpeg
+      - name: ffmpeg 64 bits
         run: |
           $ProgressPreference = 'SilentlyContinue'
-          Invoke-WebRequest -Uri "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip" -OutFile ffmpeg.zip
-          Expand-Archive ffmpeg.zip -DestinationPath ffx
-          $exe = Get-ChildItem -Path ffx -Recurse -Filter ffmpeg.exe | Select-Object -First 1
+          Invoke-WebRequest -Uri "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip" -OutFile ffmpeg64.zip
+          Expand-Archive ffmpeg64.zip -DestinationPath ffx64
+          $exe = Get-ChildItem -Path ffx64 -Recurse -Filter ffmpeg.exe | Select-Object -First 1
           Copy-Item $exe.FullName out\ffmpeg.exe
           Remove-Item out\*.pdb -ErrorAction SilentlyContinue
+
+      - name: ffmpeg 32 bits
+        run: |
+          $ProgressPreference = 'SilentlyContinue'
+          New-Item -ItemType Directory -Path out32 | Out-Null
+          Copy-Item out\SuperScreenRecorder.exe out32\
+          Copy-Item out\SuperScreenRecorder.exe.config out32\
+          Invoke-WebRequest -Uri "https://github.com/OKaluza/ffmpeg.zeranoe.com/raw/main/ffmpeg-4.3.1-win32-static.zip" -OutFile ffmpeg32.zip
+          Expand-Archive ffmpeg32.zip -DestinationPath ffx32
+          $exe = Get-ChildItem -Path ffx32 -Recurse -Filter ffmpeg.exe | Select-Object -First 1
+          Copy-Item $exe.FullName out32\ffmpeg.exe
 
       - uses: actions/upload-artifact@v4
         with:
           name: SuperScreenRecorder-PC
           path: out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SuperScreenRecorder-PC-32bits
+          path: out32
