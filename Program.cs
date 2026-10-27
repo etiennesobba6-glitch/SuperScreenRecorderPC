@@ -68,7 +68,7 @@ namespace SuperScreenRecorder
             timer.Tick += (s, e) =>
             {
                 TimeSpan t = DateTime.Now - startTime;
-                status.Text = "Enregistrement en cours  " + t.ToString(@"mm\:ss") + "\nF9 pour arreter";
+                status.Text = "Enregistrement en cours  " + string.Format("{0:00}:{1:00}", (int)t.TotalMinutes, t.Seconds) + "\nF9 pour arreter";
             };
 
             Load += (s, e) => RegisterHotKey(Handle, 1, 0, (uint)Keys.F9);
@@ -110,7 +110,7 @@ namespace SuperScreenRecorder
                 return;
             }
             string dir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.MyVideos),
+                Environment.GetEnvironmentVariable("USERPROFILE") + "\\Videos",
                 "SuperScreenRecorder");
             Directory.CreateDirectory(dir);
             outFile = Path.Combine(dir, "rec_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".mp4");
@@ -131,7 +131,7 @@ namespace SuperScreenRecorder
                 RedirectStandardInput = true,
                 RedirectStandardError = true
             };
-            errors.Clear();
+            errors.Length = 0;
             ff = Process.Start(psi);
             ff.ErrorDataReceived += (s, e) => { if (e.Data != null) errors.AppendLine(e.Data); };
             ff.BeginErrorReadLine();

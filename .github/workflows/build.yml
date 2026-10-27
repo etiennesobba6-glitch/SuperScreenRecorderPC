@@ -14,6 +14,9 @@ jobs:
       - name: Compiler
         run: dotnet build SuperScreenRecorder.csproj -c Release -o out
 
+      - name: Compiler pour Windows 7
+        run: dotnet build SuperScreenRecorder.csproj -c Release -p:TargetFramework=net35 -o out35
+
       - name: ffmpeg 64 bits
         run: |
           $ProgressPreference = 'SilentlyContinue'
@@ -27,8 +30,8 @@ jobs:
         run: |
           $ProgressPreference = 'SilentlyContinue'
           New-Item -ItemType Directory -Path out32 | Out-Null
-          Copy-Item out\SuperScreenRecorder.exe out32\
-          Copy-Item out\SuperScreenRecorder.exe.config out32\
+          Copy-Item out35\SuperScreenRecorder.exe out32\
+          Copy-Item out35\SuperScreenRecorder.exe.config out32\
           Invoke-WebRequest -Uri "https://github.com/OKaluza/ffmpeg.zeranoe.com/raw/main/ffmpeg-4.3.1-win32-static.zip" -OutFile ffmpeg32.zip
           Expand-Archive ffmpeg32.zip -DestinationPath ffx32
           $exe = Get-ChildItem -Path ffx32 -Recurse -Filter ffmpeg.exe | Select-Object -First 1
