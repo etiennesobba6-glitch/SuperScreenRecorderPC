@@ -1,0 +1,29 @@
+name: Build EXE
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compiler
+        run: dotnet build SuperScreenRecorder.csproj -c Release -o out
+
+      - name: Ajouter ffmpeg
+        run: |
+          $ProgressPreference = 'SilentlyContinue'
+          Invoke-WebRequest -Uri "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip" -OutFile ffmpeg.zip
+          Expand-Archive ffmpeg.zip -DestinationPath ffx
+          $exe = Get-ChildItem -Path ffx -Recurse -Filter ffmpeg.exe | Select-Object -First 1
+          Copy-Item $exe.FullName out\ffmpeg.exe
+          Remove-Item out\*.pdb -ErrorAction SilentlyContinue
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SuperScreenRecorder-PC
+          path: out
