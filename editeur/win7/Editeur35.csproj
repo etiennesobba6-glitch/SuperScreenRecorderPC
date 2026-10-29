@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net35</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>EditeurVideo</AssemblyName>
+    <RootNamespace>Editeur</RootNamespace>
+    <PlatformTarget>x86</PlatformTarget>
+    <ApplicationIcon>..\..\icon.ico</ApplicationIcon>
+    <LangVersion>latest</LangVersion>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\src\**\*.cs" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net35" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+</Project>
