@@ -10,4 +10,5 @@
   <ItemGroup Condition="'$(TargetFramework)' == 'net35'">
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net35" Version="1.0.3" PrivateAssets="all" />
   </ItemGroup>
+  <ItemGroup><Compile Remove="editeur\**" /></ItemGroup>
 </Project>
