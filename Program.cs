@@ -18,6 +18,87 @@ namespace SuperScreenRecorder
         }
     }
 
+    class RegionSelector : Form
+    {
+        Point start;
+        Rectangle sel;
+        bool dragging;
+        public Rectangle Result;
+
+        public RegionSelector()
+        {
+            FormBorderStyle = FormBorderStyle.None;
+            StartPosition = FormStartPosition.Manual;
+            Bounds = Screen.PrimaryScreen.Bounds;
+            TopMost = true;
+            ShowInTaskbar = false;
+            BackColor = Color.Black;
+            Opacity = 0.4;
+            Cursor = Cursors.Cross;
+            DoubleBuffered = true;
+        }
+
+        static Rectangle Norm(Point a, Point b)
+        {
+            int x = Math.Min(a.X, b.X);
+            int y = Math.Min(a.Y, b.Y);
+            return new Rectangle(x, y, Math.Abs(a.X - b.X), Math.Abs(a.Y - b.Y));
+        }
+
+        protected override void OnMouseDown(MouseEventArgs e)
+        {
+            if (e.Button != MouseButtons.Left) return;
+            start = e.Location;
+            sel = new Rectangle(e.Location, Size.Empty);
+            dragging = true;
+        }
+
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            if (!dragging) return;
+            sel = Norm(start, e.Location);
+            Invalidate();
+        }
+
+        protected override void OnMouseUp(MouseEventArgs e)
+        {
+            if (!dragging) return;
+            dragging = false;
+            sel = Norm(start, e.Location);
+            if (sel.Width >= 32 && sel.Height >= 32)
+            {
+                Result = sel;
+                DialogResult = DialogResult.OK;
+            }
+            else
+            {
+                sel = Rectangle.Empty;
+                Invalidate();
+            }
+        }
+
+        protected override void OnKeyDown(KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Escape) DialogResult = DialogResult.Cancel;
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            using (var f = new Font("Arial", 16, FontStyle.Bold))
+            {
+                e.Graphics.DrawString("Dessinez la zone avec la souris (min 32 x 32). Echap pour annuler.",
+                    f, Brushes.White, 20, 20);
+                if (sel.Width > 0 && sel.Height > 0)
+                {
+                    using (var p = new Pen(Color.Red, 3))
+                        e.Graphics.DrawRectangle(p, sel);
+                    e.Graphics.DrawString(sel.Width + " x " + sel.Height, f, Brushes.Yellow,
+                        sel.X + 6, sel.Y + 6);
+                }
+            }
+        }
+    }
+
     class MainForm : Form
     {
         [DllImport("user32.dll")]
@@ -25,16 +106,19 @@ namespace SuperScreenRecorder
         [DllImport("user32.dll")]
         static extern bool UnregisterHotKey(IntPtr h, int id);
 
-        Label status;
-        ComboBox res, fps, weight, pos, dur;
+        Label status, regionLabel;
+        ComboBox zone, res, fps, weight, pos, dur;
         TextBox titleBox, subBox;
-        Button btn;
+        CheckBox frameBox;
+        Button btn, zoneBtn;
         Timer timer = new Timer();
         Process ff;
         string outFile;
         DateTime startTime;
         StringBuilder errors = new StringBuilder();
+        Rectangle region = Rectangle.Empty;
 
+        readonly string[] zoneLabels = { "Tout l'ecran", "Zone a dessiner" };
         readonly string[] resLabels = { "Ecran natif", "1080p", "720p", "480p" };
         readonly int[] resValues = { 0, 1080, 720, 480 };
         readonly int[] fpsValues = { 30, 24, 15 };
@@ -49,29 +133,50 @@ namespace SuperScreenRecorder
         {
             Text = "Super Screen Recorder";
             Width = 380;
-            Height = 520;
+            Height = 560;
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
             StartPosition = FormStartPosition.CenterScreen;
             try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
 
-            status = new Label { Left = 20, Top = 15, Width = 330, Height = 40,
+            status = new Label { Left = 20, Top = 12, Width = 330, Height = 36,
                 Text = "Pret. Raccourci : F9 pour demarrer / arreter." };
             Controls.Add(status);
 
-            res = AddCombo("Resolution", 20, 60, 330, resLabels, 2);
-            fps = AddCombo("Images par seconde", 20, 115, 330, Array.ConvertAll(fpsValues, v => v + " fps"), 0);
-            weight = AddCombo("Poids de la video", 20, 170, 330, weightLabels, 2);
+            zone = AddCombo("Zone a enregistrer", 20, 52, 200, zoneLabels, 0);
+            zoneBtn = new Button { Left = 230, Top = 74, Width = 120, Height = 24,
+                Text = "Choisir la zone", Enabled = false };
+            zoneBtn.Click += (s, e) => ChooseRegion();
+            Controls.Add(zoneBtn);
+            regionLabel = new Label { Left = 20, Top = 102, Width = 330, Height = 18, Text = "" };
+            Controls.Add(regionLabel);
 
-            titleBox = AddText("Titre (facultatif)", 225);
-            subBox = AddText("Sous-titre (facultatif)", 280);
-            pos = AddCombo("Position du texte", 20, 335, 150, posLabels, 2);
-            dur = AddCombo("Duree d'affichage", 190, 335, 160, durLabels, 0);
+            res = AddCombo("Resolution", 20, 125, 160, resLabels, 2);
+            fps = AddCombo("Images/seconde", 190, 125, 160, Array.ConvertAll(fpsValues, v => v + " fps"), 0);
+            weight = AddCombo("Poids de la video", 20, 180, 330, weightLabels, 2);
 
-            btn = new Button { Left = 20, Top = 410, Width = 330, Height = 45,
+            titleBox = AddText("Titre (facultatif)", 235);
+            subBox = AddText("Sous-titre (facultatif)", 290);
+            pos = AddCombo("Position du texte", 20, 345, 150, posLabels, 2);
+            dur = AddCombo("Duree d'affichage", 190, 345, 160, durLabels, 0);
+
+            frameBox = new CheckBox { Left = 20, Top = 402, Width = 330,
+                Text = "Afficher un cadre autour de la zone", Enabled = false };
+            Controls.Add(frameBox);
+
+            btn = new Button { Left = 20, Top = 435, Width = 330, Height = 45,
                 Text = "Demarrer (F9)" };
             btn.Click += (s, e) => Toggle();
             Controls.Add(btn);
+
+            zone.SelectedIndexChanged += (s, e) =>
+            {
+                bool custom = zone.SelectedIndex == 1;
+                zoneBtn.Enabled = custom;
+                frameBox.Enabled = custom;
+                if (custom && region.IsEmpty && !ChooseRegion()) zone.SelectedIndex = 0;
+                UpdateRegionLabel();
+            };
 
             timer.Interval = 500;
             timer.Tick += (s, e) =>
@@ -107,6 +212,41 @@ namespace SuperScreenRecorder
             var t = new TextBox { Left = 20, Top = top + 22, Width = 330 };
             Controls.Add(t);
             return t;
+        }
+
+        void UpdateRegionLabel()
+        {
+            if (zone.SelectedIndex == 1 && !region.IsEmpty)
+                regionLabel.Text = "Zone : " + region.Width + " x " + region.Height +
+                    "  (a partir de " + region.X + ", " + region.Y + ")";
+            else
+                regionLabel.Text = "";
+        }
+
+        bool ChooseRegion()
+        {
+            bool ok = false;
+            Hide();
+            using (var sel = new RegionSelector())
+            {
+                if (sel.ShowDialog() == DialogResult.OK)
+                {
+                    region = sel.Result;
+                    ok = true;
+                }
+            }
+            Show();
+            Activate();
+            UpdateRegionLabel();
+            return ok;
+        }
+
+        Rectangle ClampRegion()
+        {
+            Rectangle r = Rectangle.Intersect(region, Screen.PrimaryScreen.Bounds);
+            r.Width = r.Width / 2 * 2;
+            r.Height = r.Height / 2 * 2;
+            return r;
         }
 
         protected override void WndProc(ref Message m)
@@ -147,6 +287,7 @@ namespace SuperScreenRecorder
 
             int tSize = Math.Max(18, outH / 16);
             int sSize = Math.Max(14, outH / 26);
+            int margin = Math.Max(10, outH / 18);
             int d = durValues[dur.SelectedIndex];
             string enable = d > 0 ? ":enable='lt(t," + d + ")'" : "";
             bool hasT = t.Length > 0, hasS = s.Length > 0;
@@ -155,16 +296,16 @@ namespace SuperScreenRecorder
             switch (pos.SelectedIndex)
             {
                 case 0:
-                    yT = "60";
-                    yS = (60 + (hasT ? tSize * 2 : 0)).ToString();
+                    yT = margin.ToString();
+                    yS = (margin + (hasT ? tSize * 2 : 0)).ToString();
                     break;
                 case 1:
                     yT = "(h-text_h)/2-" + (hasS ? sSize : 0);
                     yS = "(h-text_h)/2+" + (hasT ? tSize : 0);
                     break;
                 default:
-                    yS = "h-text_h-60";
-                    yT = "h-text_h-" + (60 + (hasS ? sSize * 2 + 10 : 0));
+                    yS = "h-text_h-" + margin;
+                    yT = "h-text_h-" + (margin + (hasS ? sSize * 2 + 10 : 0));
                     break;
             }
 
@@ -182,6 +323,21 @@ namespace SuperScreenRecorder
                 MessageBox.Show("ffmpeg.exe introuvable a cote du programme.");
                 return;
             }
+
+            Rectangle reg = Rectangle.Empty;
+            if (zone.SelectedIndex == 1)
+            {
+                if (region.IsEmpty && !ChooseRegion()) return;
+                reg = ClampRegion();
+                if (reg.Width < 16 || reg.Height < 16)
+                {
+                    MessageBox.Show("Zone invalide, choisis-la de nouveau.");
+                    region = Rectangle.Empty;
+                    UpdateRegionLabel();
+                    return;
+                }
+            }
+
             string dir = Path.Combine(
                 Environment.GetEnvironmentVariable("USERPROFILE") + "\\Videos",
                 "SuperScreenRecorder");
@@ -189,16 +345,23 @@ namespace SuperScreenRecorder
             outFile = Path.Combine(dir, "rec_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".mp4");
 
             int r = resValues[res.SelectedIndex];
-            int screenH = Screen.PrimaryScreen.Bounds.Height;
-            int outH = r == 0 ? screenH : Math.Min(r, screenH);
+            int baseH = reg.IsEmpty ? Screen.PrimaryScreen.Bounds.Height : reg.Height;
+            int outH = r == 0 ? baseH : Math.Min(r, baseH);
             string vf = r == 0
                 ? "scale=trunc(iw/2)*2:trunc(ih/2)*2"
                 : "scale=-2:min(" + r + "\\,ih)";
             vf += BuildText(outH);
 
             int f = fpsValues[fps.SelectedIndex];
-            string args = "-y -loglevel error -nostats -f gdigrab -framerate " + f +
-                " -draw_mouse 1 -i desktop -vf \"" + vf + "\" -c:v libx264 -preset veryfast -crf " +
+            string input = "-f gdigrab -framerate " + f + " -draw_mouse 1";
+            if (!reg.IsEmpty)
+            {
+                input += " -offset_x " + reg.X + " -offset_y " + reg.Y +
+                    " -video_size " + reg.Width + "x" + reg.Height;
+                if (frameBox.Checked) input += " -show_region 1";
+            }
+            string args = "-y -loglevel error -nostats " + input + " -i desktop -vf \"" + vf +
+                "\" -c:v libx264 -preset veryfast -crf " +
                 crf[weight.SelectedIndex] + " -pix_fmt yuv420p -movflags +faststart \"" + outFile + "\"";
 
             var psi = new ProcessStartInfo(ffPath, args)
